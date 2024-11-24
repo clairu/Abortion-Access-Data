@@ -1,0 +1,718 @@
+---
+title: "Final Project"
+output: html_document
+date: "2024-05-20"
+---
+Claire Zhang and Michael He
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
+#Loading the data and the packages used
+library(gganimate)
+library(ggplot2)
+library(tidyverse)
+library(maps)
+library(rvest)
+library(viridis)
+library(usmap)
+library(cowplot)
+setwd("/Users/clairezhang/Downloads/STATS 0201/Datasets")
+```
+
+```{r}
+#Professor Caitlin Myers's Data
+abortion_cts <-
+  read_csv(
+    "/Users/clairezhang/Downloads/STATS 0201/Datasets/statehealthdept_abortioncounts_countyxyear.csv"
+  )
+#This data set is from the Guttmacher Institute and includes information on pregnancy rates, abortion rates, and abortion counts from 1971-2020.) We used it for the abortion rates animation graph over time.
+public_data <- read_csv(
+  "/Users/clairezhang/Downloads/STATS 0201/Datasets/NationalAndStatePregnancy_PublicUse.csv"
+)
+#This data set is from the New York State Division of Criminal Justice Services, which shows all reported crime and victimization going back to 2000.
+ny_crime <- read_csv(
+  "/Users/clairezhang/Downloads/STATS 0201/Datasets/NYS Index Crime by County back to 2000.csv"
+)
+#This data set is a uniform crime report (UCR) from the Florida Department of Law Enforcement.
+fl_crime_2020 <- read_csv(
+  "/Users/clairezhang/Downloads/STATS 0201/Datasets/Total_Index_Crime_by_County_Florida_2020.csv"
+)
+#This data set is of violent crime reports from the Florida’s Bureaus of Community Health Assessment and Vital Statistics detailing the crime index rates and more information on crime in each county.
+fl_crime <- read_csv("/Users/clairezhang/Downloads/STATS 0201/Datasets/NonVitalInd-FL-Data-.csv")
+#This data set shows the no. of abortions per 1,000 women aged 15–44, by state of residence in 2020.
+no_of_abortions <- read_csv("/Users/clairezhang/Downloads/STATS 0201/Datasets/2020 Abortions Women 15-44.csv")
+#This data set shows the uniform crime report in Florida from 1972-2020. The source for this data is the Florida Statistical Analysis Center: DLE.
+fl_crime_over_time <- read_csv("/Users/clairezhang/Downloads/STATS 0201/Datasets/1972_2020_Total_Crime.csv")
+ny_crime_over_time <- read_csv(
+  "/Users/clairezhang/Downloads/STATS 0201/Datasets/NYS Index Crime by County back to 2000.csv"
+)
+#This data set is from the Bureau of Economic Analysis showing per capita personal income from 2020-2022 in every county in the US.
+income_cts <- read.csv("/Users/clairezhang/Downloads/STATS 0201/Datasets/income.csv")
+options(scipen = 1000000)
+```
+
+```{r}
+#Setting up data for the keystone graphic
+#Mostly cleaning up the data
+states_abortion <- abortion_cts |>
+  mutate(state = str_extract(county_name, "(?<=\\()[:alpha:]{2}(?=\\))"))
+
+state_population <- states_abortion |>
+  drop_na(abortions, population, arate) |>
+  group_by(year, state) |>
+  summarize(sum_popu = sum(population))
+
+state_a_ct <- states_abortion |>
+  drop_na(abortions, population, arate) |>
+  group_by(state, year) |>
+  summarize(sum_abortion = sum(abortions))
+
+intermediary <- left_join(state_population, states_abortion)
+
+final <- left_join(state_a_ct, intermediary)
+
+#Setting up the map_data
+map_data <- us_map(regions = "states")
+
+map_data_full <- map_data |>
+  mutate(year = 2009) |>
+  rbind(map_data |>
+          mutate(year = 2010)) |>
+  rbind(map_data |>
+          mutate(year = 2011)) |>
+  rbind(map_data |>
+          mutate(year = 2012)) |>
+  rbind(map_data |>
+          mutate(year = 2013)) |>
+  rbind(map_data |>
+          mutate(year = 2014)) |>
+  rbind(map_data |>
+          mutate(year = 2015)) |>
+  rbind(map_data |>
+          mutate(year = 2016)) |>
+  rbind(map_data |>
+          mutate(year = 2017)) |>
+  rbind(map_data |>
+          mutate(year = 2018)) |>
+  rbind(map_data |>
+          mutate(year = 2019)) |>
+  rbind(map_data |>
+          mutate(year = 2020))
+```
+
+# Keystone Graphic and Correlation Findings
+
+```{r}
+#Cleaning up the data
+fl_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "FL")
+
+fl_map_crime_2020 <- fl_county_map_data |>
+  left_join(fl_crime_2020, by = c("county" = "County"))
+
+ny_crime_2020 <- ny_crime |>
+  filter(Year == 2020)
+
+new_ny_crime_2020 <- ny_crime_2020 |>
+  mutate(county_name = str_c(County, " County"))
+
+ny_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "NY")
+
+ny_map_crime_2020 <- ny_county_map_data |>
+  left_join(new_ny_crime_2020, by = c("county" = "county_name"))
+
+```
+
+```{r}
+#For Florida, Pearson's Correlation Coefficient
+new_fl_county_abortion <- states_abortion |>
+  filter(year == 2020) |>
+  filter(state == "FL")
+
+new_fl_abortion_county <- new_fl_county_abortion |>
+  mutate(county = str_remove(county_name, " \\(FL\\)"))
+
+florida_crime_abortion_final <- fl_map_crime_2020 |>
+  left_join(new_fl_abortion_county, by = c("county" = "county"))
+
+florida_crime_abortion_graph <- florida_crime_abortion_final |>
+  ggplot() +
+  geom_point(aes(
+    x = `Index Rate Per 100,000`,
+    y = arate,
+    size = population,
+    color = population
+  )) +
+  labs(
+    title = "Rate of Abortions vs Index Rate Per 100,000 in Florida in 2020",
+    x = "Index Rate Per 100,000",
+    y = "Rate of Abortions (Number of Abortions per 1000 Women)",
+    size = "Population",
+    alpha = 0.7,
+    color = "Population"
+  ) +
+  scale_x_continuous(labels = scales::number_format()) + scale_size_continuous(labels = scales::comma) + guides(alpha = "none")
+
+florida_crime_cleaned <- florida_crime_abortion_final |>
+  na.omit()
+
+#The correlation coefficient for crime and abortion rate in Florida
+#using Pearson's Correlation Coefficient
+florida_crime_cor <- cor(florida_crime_cleaned$arate,
+    florida_crime_cleaned$`Index Rate Per 100,000`)
+
+print(florida_crime_cor)
+```
+
+```{r}
+#Income Data
+new_county_data_full <- states_abortion |>
+  filter(year == c(2020)) |>
+  filter(state == "FL")
+
+new_income_data <- income_cts |>
+  filter(State == "FL")
+
+new_income_data_final <- new_income_data |>
+  mutate(county_name = str_c(X, " County"))
+
+new_county_data_final <- new_county_data_full |>
+  mutate(county_name2 = str_remove(county_name, " County \\(FL\\)"))
+
+florida_income_abortion_final <- new_county_data_final |>
+  left_join(new_income_data, by = c("county_name2" = "X"))
+
+florida_income_abortion_final_graph <- florida_income_abortion_final |>
+  ggplot() +
+  geom_point(aes(x = X2020, y = arate, 
+                 size = population,
+             color = population,
+             alpha = 0.7)) +
+  labs(
+    title = "Rate of Abortions vs County Income per Capita in Florida in 2020",
+    x = "Median Income",
+    y = "Rate of Abortions (Number of Abortions per 1000 Women)",
+    size = "Population",
+    color = "Population"
+  ) +
+  scale_x_continuous(labels = scales::number_format()) + scale_size_continuous(labels = scales::comma) 
+
+florida_cleaned <- florida_income_abortion_final |>
+  na.omit()
+#Correlation of Florida Abortion Rate vs Income
+
+florida_income_cor <- cor(florida_cleaned$arate, florida_cleaned$X2020)
+print(florida_income_cor)
+```
+
+```{r}
+#New York, Pearson's Correlation Coefficient for 2020
+new_ny_county_abortion <- states_abortion |>
+  filter(year == 2020) |>
+  filter(state == "NY")
+
+new_ny_abortion_county <- new_ny_county_abortion |>
+  mutate(county = str_remove(county_name, " \\(NY\\)"))
+
+ny_crime_abortion_final <- ny_map_crime_2020 |>
+  left_join(new_ny_abortion_county, by = c("county" = "county"))
+
+ny_crime_abortion_graph <- ny_crime_abortion_final |>
+  ggplot() +
+  geom_point(aes(x = `Index Total Rate`, y = arate, size = population, color = population)) +
+  labs(title = "Rate of Abortions vs Index Rate Per 100,000 in New York in 2020", 
+       x = "Index Total Rate Per 100,000", 
+       y = "Rate of Abortions (Number of Abortions per 1000 Women)", size = "Population",
+       color = "Population") +
+  scale_x_continuous(labels = scales::number_format()) + scale_size_continuous(labels = scales::comma) +
+  guides(alpha = none)
+
+ny_crime_cleaned <- ny_crime_abortion_final |>
+  na.omit()
+```
+
+```{r, fig.width=14,fig.height=10}
+#Keystone Graphics
+plot_grid(florida_crime_abortion_graph, ny_crime_abortion_graph, ncol = 2, nrow = 1)
+```
+
+```{r}
+ny_crime_cor <- cor(ny_crime_cleaned$arate, ny_crime_cleaned$`Index Total Rate`)
+print(ny_crime_cor)
+```
+
+```{r}
+#Making NY income vs abortion rate scatter plot
+new_york_county_data <- states_abortion |>
+  filter(year == c(2020)) |>
+  filter(state == "NY")
+
+newyork_income_data <- income_cts |>
+  filter(State == "New York")
+
+new_york_county_data_final <- new_york_county_data |>
+  mutate(county_name2 = str_remove(county_name, " County \\(NY\\)"))
+
+newyork_income_abortion_final <- new_york_county_data_final |>
+  left_join(newyork_income_data, by = c("county_name2" = "X"))
+
+newyork_income_abortion_graph <- newyork_income_abortion_final |>
+  ggplot() +
+  geom_point(aes(x = X2020, y = arate, size = population,
+             color = population,
+             alpha = 0.7)) +
+  labs(
+    title = "Rate of Abortions vs County Income per Capita in New York in 2020",
+    x = "Median Income",
+    y = "Rate of Abortions (Number of Abortions per 1000 Women)",
+    size = "Population",
+    color = "Population"
+  ) +
+  scale_x_continuous(labels = scales::number_format()) +
+  scale_size_continuous(labels = scales::comma) +
+  guides(alpha = "none")
+
+#Correlation of NY abortion rate vs income
+
+new_york_cleaned <- newyork_income_abortion_final |>
+  na.omit()
+
+#New York Abortion vs Median Income Correlation Coefficient
+ny_income_cor <- cor(new_york_cleaned$arate, new_york_cleaned$X2020)
+print(ny_income_cor)
+```
+
+
+```{r, fig.width=14,fig.height=10}
+plot_grid(florida_income_abortion_final_graph, 
+          newyork_income_abortion_graph, ncol = 2, nrow = 1)
+```
+
+# Introduction
+
+Our final project is primarily looking at abortion data in U.S. counties that Professor Caitlin Myers collected throughout 2009-2020 and how it compares to other data collected in America, such as crime or income. As indicated in the user guide, this data is an incomplete collection because there are select states in America that do not surveil the abortion counts. Additionally, out of the states that do report the abortion counts, not all provide abortion data for each county; we focused on Florida and New York as they are both large states with relatively similar population sizes. In this project, we aim to address two questions: 1) Is there a relationship between abortion rates and income? 2) Is there a relationship between abortion rates and crime? In addition to the data Professor Myers collected, we used 8 other datasets ranging from income to historical crime data —a description of each data set is shown in the code when it is read in. Since some of our data did not go back very far, we decided to focus our analysis on 2020, as that was the year when each dataset had viable data. 
+
+# Methods
+
+For the research question about income, we wanted to see whether or not there was a correlation between socioeconomic status, specifically, how income affects abortion rates. To do this, we found data showing the per capita personal income from every county in the United States from 2020 to 2023. However, our data looking at the number of abortions from Professor Myers only went to 2020, so we settled on focusing on the 2020 data from both sources. Next, using the heat map we created showing the total sum of abortions per state, we found that in 2020, the three states with the highest total number of abortions performed were New York, Florida, and Texas. Since New York and Florida have relatively similar total populations —approximately 20 million—, we decided to compare those two states. They also differ politically, with New York being a blue state while Florida is a red state, so we thought it would be interesting to see if there were any differences. We also included heat maps of income per capita in each county for each state. Finally, we made a scatter plot comparing per capita income to abortion rates (number of abortions per 1000 women). We also performed Pearson's correlation tests between county abortion rate and county income per capita.
+
+Regarding the question about crime, we were curious about whether or not there was a relationship between crime index rates and abortion rates. The data set we read in for this was the county level data provided by Professor Myers, which showed the abortion rate. The crime index rates were found by combing through the government websites to find county-level data for both New York and Florida, and this resulted in deciding to make heat maps of both of the states at a county-level to contribute to our findings.
+
+Because each data set ended up being quite hefty, we dug into most of the data sets and created many exploratory graphs. The first chunk of code is dividing the data into regions so that the analysis could be studied in a more generalized way. We then chose to do a heat map of the Abortion Counts in each state of the United States first because of how the relative intensity of the abortion counts and rates is displayed in the graphic. 
+```{r}
+#Grouping the data by region
+NE.name <- c(
+  "Connecticut",
+  "Maine",
+  "Massachusetts",
+  "New Hampshire",
+  "Rhode Island",
+  "Vermont",
+  "New Jersey",
+  "New York",
+  "Pennsylvania"
+)
+northeast_states <- c("CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA")
+northeast_ref <- c(NE.name, northeast_states)
+MW.name <- c(
+  "Indiana",
+  "Illinois",
+  "Michigan",
+  "Ohio",
+  "Wisconsin",
+  "Iowa",
+  "Kansas",
+  "Minnesota",
+  "Missouri",
+  "Nebraska",
+  "North Dakota",
+  "South Dakota"
+)
+midwest_states <- c("IN",
+                    "IL",
+                    "MI",
+                    "OH",
+                    "WI",
+                    "IA",
+                    "KS",
+                    "MN",
+                    "MO",
+                    "NE",
+                    "ND",
+                    "SD")
+midwest_ref <- c(MW.name, midwest_states)
+
+S.name <- c(
+  "Delaware",
+  "District of Columbia",
+  "Florida",
+  "Georgia",
+  "Maryland",
+  "North Carolina",
+  "South Carolina",
+  "Virginia",
+  "West Virginia",
+  "Alabama",
+  "Kentucky",
+  "Mississippi",
+  "Tennessee",
+  "Arkansas",
+  "Louisiana",
+  "Oklahoma",
+  "Texas"
+)
+south_states <- c(
+  "DE",
+  "DC",
+  "FL",
+  "GA",
+  "MD",
+  "NC",
+  "SC",
+  "VA",
+  "WV",
+  "AL",
+  "KY",
+  "MS",
+  "TN",
+  "AR",
+  "LA",
+  "OK",
+  "TX"
+)
+south_ref <- c(S.name, south_states)
+W.name <- c(
+  "Arizona",
+  "Colorado",
+  "Idaho",
+  "New Mexico",
+  "Montana",
+  "Utah",
+  "Nevada",
+  "Wyoming",
+  "Alaska",
+  "California",
+  "Hawaii",
+  "Oregon",
+  "Washington"
+)
+west_states <- c("AZ",
+                 "CO",
+                 "ID",
+                 "NM",
+                 "MT",
+                 "UT",
+                 "NV",
+                 "WY",
+                 "AK",
+                 "CA",
+                 "HI",
+                 "OR",
+                 "WA")
+west_ref <- c(W.name, west_states)
+region.list <- list(
+  Northeast = northeast_ref,
+  Midwest = midwest_ref,
+  South = south_ref,
+  West = west_ref
+)
+
+final$regions <- sapply(final$state, function(x)
+  names(region.list)[grep(x, region.list)])
+```
+
+Here, we made an exploratory heat map of the sum of the abortions in the United States in 2020. 
+```{r}
+#Another general exploratory heat map of the abortions in the United States in 2020
+no_abortions_heatmap <- map_data_full |>
+  left_join(no_of_abortions, by = c("full" = "U.S. State")) 
+
+no_abortions_heatmap |>
+  ggplot() +
+  geom_sf(aes(fill = abortions)) + 
+  ggtitle("Heat Map of Abortions Performed per State in 2020") +
+  labs(fill = "Sum of Abortions") +
+  scale_fill_viridis() 
+```
+
+For this section, it was important to see how abortion rates have changed over time, so we decided to create an line graph animation depicting how abortion rates have changed from 1971-2020 in New York and Florida. We filtered the data, used the function pivot_longer to group all of the given age groups together, and then transitioned the created frames by year for the animation. We can see in the boxplot and the animation that the abortion rates have been decreasing over the past few decades.
+
+```{r}
+public_data
+
+filtered_public_data <- public_data |>
+  select(
+    -abortionrate1517,
+    -abortionrate1519,
+    -abortionrate1819,
+    -abortionratelt15,
+    -abortionratetotal
+  )
+
+fl_long_data <- filtered_public_data |>
+  filter(state == "FL") |>
+  pivot_longer(
+    cols = starts_with("abortionrate"),
+    names_to = "age_group",
+    values_to = "abortion_rate"
+  )
+
+ny_long_data <- filtered_public_data |>
+  filter(state == "NY") |>
+  pivot_longer(
+    cols = starts_with("abortionrate"),
+    names_to = "age_group",
+    values_to = "abortion_rate"
+  )
+# Plot the data
+fl_long_data |>
+  mutate(
+    age_clean = case_when(
+      age_group == "abortionrate2024" ~ "20-24",
+      age_group == "abortionrate2529" ~ "25-29",
+      age_group == "abortionrate3034" ~ "30-34",
+      age_group == "abortionrate3539" ~ "35-39",
+      age_group == "abortionrate40plus" ~ "40+",
+      age_group == "abortionratelt20" ~ "<20"
+    )
+  ) |>
+  ggplot() +
+  geom_line(aes(x = year, y = abortion_rate, color = age_clean)) +
+  labs(
+    title = "Abortion Rates by Age Group in Florida 1971-2020",
+    x = "Year",
+    y = "Abortion Rate (Per 1000 Women)",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+ny_long_data |>
+  mutate(
+    age_clean = case_when(
+      age_group == "abortionrate2024" ~ "20-24",
+      age_group == "abortionrate2529" ~ "25-29",
+      age_group == "abortionrate3034" ~ "30-34",
+      age_group == "abortionrate3539" ~ "35-39",
+      age_group == "abortionrate40plus" ~ "40+",
+      age_group == "abortionratelt20" ~ "<20"
+    )
+  ) |>
+  ggplot(aes(x = year, y = abortion_rate, color = age_clean)) +
+  geom_line() +
+  labs(
+    title = "Abortion Rates by Age Group in New York 1971-2020",
+    x = "Year",
+    y = "Abortion Rate (Per 1000 Women)",
+    color = "Age Group"
+  ) +
+  theme_minimal()
+
+ny_arate_animate <- ny_long_data |>
+  mutate(
+    age_clean = case_when(
+      age_group == "abortionrate2024" ~ "20-24",
+      age_group == "abortionrate2529" ~ "25-29",
+      age_group == "abortionrate3034" ~ "30-34",
+      age_group == "abortionrate3539" ~ "35-39",
+      age_group == "abortionrate40plus" ~ "40+",
+      age_group == "abortionratelt20" ~ "<20"
+    )
+  ) |>
+  ggplot(aes(x = year, y = abortion_rate, color = age_clean)) +
+  geom_line() +
+  labs(
+    title = "Abortion Rates by Age Group in New York 1971-2020",
+    x = "Year",
+    y = "Abortion Rate (Per 1000 Women)",
+    color = "Age Group"
+  ) +
+  theme_minimal() +
+  transition_reveal(year)
+
+fl_arate_animate <- fl_long_data |>
+  mutate(
+    age_clean = case_when(
+      age_group == "abortionrate2024" ~ "20-24",
+      age_group == "abortionrate2529" ~ "25-29",
+      age_group == "abortionrate3034" ~ "30-34",
+      age_group == "abortionrate3539" ~ "35-39",
+      age_group == "abortionrate40plus" ~ "40+",
+      age_group == "abortionratelt20" ~ "<20"
+    )
+  ) |>
+  ggplot(aes(x = year, y = abortion_rate, color = age_clean)) +
+  geom_line() +
+  labs(
+    title = "Abortion Rates by Age Group in Florida 1971-2020",
+    x = "Year",
+    y = "Abortion Rate (Per 1000 Women)",
+    color = "Age Group"
+  ) +
+  theme_minimal() +
+  transition_reveal(year)
+
+#Preparing data sets for the next section2020
+fl_crime_2020
+ny_crime_2020 <- ny_crime |>
+  filter(Year == 2020)
+```
+
+# Results
+
+We performed Pearsons’s Correlation Tests for both income and crime prevalence vs abortion rate. 
+
+```{r}
+#Code for the four correlation tests we did —it is shown earlier but we added it here for reference. 
+
+#Florida and New York crime rate vs abortion rate correlation
+florida_crime_cor <- cor(florida_crime_cleaned$arate,
+    florida_crime_cleaned$`Index Rate Per 100,000`)
+print(florida_crime_cor)
+
+ny_crime_cor <- cor(ny_crime_cleaned$arate, ny_crime_cleaned$`Index Total Rate`)
+print(ny_crime_cor)
+
+#Florida and New York income per capita vs abortion rate correlation
+florida_income_cor <- cor(florida_cleaned$arate, florida_cleaned$X2020)
+print(florida_income_cor)
+
+ny_income_cor <- cor(new_york_cleaned$arate, new_york_cleaned$X2020)
+print(ny_income_cor)
+```
+
+
+Income: For Florida, we yielded r = 0.181, which indicates that there is a low positive correlation between income and abortion rate. For New York, we yielded r = 0.14876, indicating that there is also a weak positive correlation between income and abortion rate. In both cases, we are confident that there was a statistically significant correlation since there were over 50 data points in both Florida and New York; a weak/low positive correlation means that the slope of increase was not very steep. To generally analyze, as income increases, abortion rate tends to increase.
+
+Crime: For Florida, the test yielded r = 0.407, which shows that there is evidence of a positive, moderate relationship between crime and abortion rate. For New York, we yielded r = 0.595, which indicates a positive, strong relationship between crime and abortion rate. Because of the large amount of data values that we have for Florida and for New York for all of the counties within each data set, we can be confident about the test showing a statistically significant result. The slope of increase is rather steep between the crime index rate and the rate of abortions. Generally, as crime increases, abortion rate tends to increase. 
+
+This graph below of the boxplots and the jitter points helped us decide to deep dive into New York State. Because the jitter points are colored by region, we can see that the South generally hugs the median of the boxplot when looking at the abortion counts per capita, whereas the Midwest and the West tend to have few abortions per capita relative to the other regions. However, the Northeast has the outlier of having much more abortions per capita than the other three regions, and when looking a the data, the outlier points are actually of New York. This propelled us to decide on New York as a state to hone in on, and as we touched on earlier, Florida is of a similar side and is somewhat a Republican-leaning state, whereas New York is a Democratic-leaning state.
+```{r}
+#Looking at abortion counts
+final |>
+  group_by(state, year, regions) |>
+  summarize(sum = sum(abortions, na.rm = TRUE) / sum(population, na.rm = TRUE)) |>
+  ggplot() +
+  geom_boxplot(aes(x = factor(year), y = sum),
+               outliers = FALSE) +
+  geom_jitter(aes(x = factor(year), y = sum, color = regions)) +
+  labs(title = "Abortion Counts Per Capita in the US 2009-2021",
+       x = "Year",
+       y = "Abortion Counts Per Capita",
+       color = "Region")
+
+#Animated Graphs to Look at Abortion Rate
+fl_arate_animate
+```
+```{r}
+ny_arate_animate
+```
+
+```{r}
+fl_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "FL") 
+
+fl_map_crime_2020 <- fl_county_map_data |>
+  left_join(fl_crime_2020, by = c("county" = "County"))
+
+#Florida 2020 Crime Index Rate Heat Map
+fl_crime_heatmap <- fl_map_crime_2020 |>
+  ggplot() +
+  geom_sf(aes(fill = `Index Rate Per 100,000`)) + 
+  scale_fill_viridis() +
+  labs(title = "Florida Crime Index Rate Heatmap 2020")
+
+#NY 2020 Crime Index Heat Map
+new_ny_crime_2020 <- ny_crime_2020 |>
+  mutate(county_name = str_c(County, " County"))
+
+ny_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "NY")
+
+ny_map_crime_2020 <- ny_county_map_data |>
+  left_join(new_ny_crime_2020, by = c("county" = "county_name"))
+
+ny_crime_heatmap <- ny_map_crime_2020 |>
+  ggplot() +
+  geom_sf(aes(fill = `Index Total Rate`)) +
+  labs(title = "New York State Crime Index Rate Heat Map 2020",
+       fill = "Index Total Rate (Per 100,000 People") +
+  scale_fill_viridis()
+
+#Florida and NY Income Heat Map 2020
+
+fl_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "FL")
+
+heatmap_income_florida <- fl_county_map_data |>
+  left_join(new_income_data_final, by = c("county" = "county_name"))
+
+fl_income_graph <- heatmap_income_florida |>
+  ggplot() +
+  geom_sf(aes(fill =  X2020)) +
+  ggtitle("Heat Map of Income per Capita in Florida in 2020") +
+  labs(fill = "Income per Capita") +
+  scale_fill_viridis()
+
+
+ny_county_map_data <- us_map(regions = "counties") |>
+  filter(abbr == "NY")
+
+newyork_income_data_final <- newyork_income_data |>
+  mutate(county_name = str_c(X, " County"))
+
+
+heatmap_income_ny <- ny_county_map_data |>
+  left_join(newyork_income_data_final, by = c("county" = "county_name"))
+
+ny_income_graph <- heatmap_income_ny |>
+  ggplot() +
+  geom_sf(aes(fill =  X2020)) +
+  ggtitle("Heat Map of Income per Capita in New York in 2020") +
+  labs(fill = "Income per Capita") +
+  scale_fill_viridis()
+
+#Florida and NY Abortion Heat Map
+
+#New York 2020 Abortion Heat Map
+ny_arate_heatmap <- ny_crime_abortion_final |>
+  ggplot() +
+  geom_sf(aes(fill = arate)) +
+  scale_fill_viridis() +
+    labs(title = "New York Abortion Heat Map 2020",
+       fill = "Abortion Rate (Per 1000 Women)")
+
+
+#Florida 2020 Abortion Heat Map
+fl_arate_heatmap <-florida_crime_abortion_final |>
+  ggplot() +
+  geom_sf(aes(fill = arate)) +
+  scale_fill_viridis() +
+  labs(title = "Florida Abortion Heat Map 2020",
+       fill = "Abortion Rate (Per 1000 Women)")
+
+```
+
+Below, there are side-by-side heat maps of comparison between New York and Florida's Income and Abortion Rate in 2020 as well as New York and Florida's Crime Index Rates and Abortion Rate in 2020. The code for this is in the chunk above, and we mainly cleaned the data to show either New York or Florida's crime/income information throughout the counties. 
+
+Income Heat Maps: By basic observation, Florida and New York appear to have a weak relation between abortion rate and income per capita. There is one county where income per capita is quite high, whereas the abortion rate is not high yet not low, and there are counties with a fairly high income per capita that have more abortions relative to the counties with a lower income per capita. Of course, it's important to realize that there are other factors that would have to be taken into consideration as well to actually determine why this is, such as the political party organization of the counties.
+
+Crime Heat Maps: From studying the heat map, counties with a high index rate appear to have a higher abortion rate in both New York and Florida.
+```{r,fig.width=18,fig.height=10}
+#Arrange side-by-side
+#Income vs Abortion Rate
+plot_grid(fl_income_graph, fl_arate_heatmap, ncol = 2, nrow = 1)
+plot_grid(ny_income_graph, ny_arate_heatmap, ncol = 2, nrow = 1)
+```
+
+```{r,fig.width=18, fig.height=10}
+#Crime vs Abortion Rate
+plot_grid(fl_crime_heatmap, fl_arate_heatmap, ncol = 2, nrow = 1)
+plot_grid(ny_crime_heatmap, ny_arate_heatmap, ncol = 2, nrow = 1)
+```
+
+# Conclusion
+With regards to the first research question: we can determine that there is a weak, positive linear relationship between income and abortion. The weak relationship resulting from the multiple data points shows that there is strong evidence that there is a weak relationship. When income increases, it affects the abortion rate, but not by a substantial amount.
+
+Addressing the second research question: because the test used is the Pearson's Correlation Coefficient, we can determine that there is evidence of a direct, moderate to strong linear correlation/relationship between abortion and crime rate in the states observed--New York and Florida. This strongly shows that the two variables are related, but correlation does not equal causation! The journey does not end here; This correlation is a step in exploring further implications of the data and possibly searching for a proof of causality, either through deduction or through a controlled study of sorts. 
+
+
