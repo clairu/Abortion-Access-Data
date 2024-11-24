@@ -1,0 +1,6 @@
+##Adv Intro to Statistics and Data Science Final
+#### Abortion Comparison
+In this project, I used data from the Myers Abortion Access Data as well as other government data to create graphs that compared abortion and crime in the United States, specifically in two states: New York and Florida. I wanted to take a red state and compare it to a blue state to gain some insight into how the statistics show the relationship between abortion and crime. This research was done around a year after Roe v. Wade was overturned, and I recalled reading in _Freakonomics_ about the linear relationship between abortion and crime rate, and I found it fitting to explore how it might have changed over time.
+
+#### Methodology and Conclusions
+For this project, I used R Studio and R Markdown. Then, I exported the project as an .html file for easier readability and as a better format for understanding the code and the outputs. I found it to be an exciting and fun project, which is why this is my first project that I am uploading on GitHub. I gained a lot of experience with scouring the internet to gather the data that I actually wanted, which took a lot of time searching through government websites and learning about the data through exploratory data analysis and data wrangling. 
